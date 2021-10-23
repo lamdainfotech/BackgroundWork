@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Hangfire.Dtos;
+using Hangfire.Services;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -27,6 +29,13 @@ namespace Hangfire
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddScoped<ITestJob, DoJob>();
+            services.AddScoped<IEmailSender, EmailSender>();
+
+            var emailConfig = Configuration.GetSection("EmailConfiguration")
+                .Get<EmailConfiguration>();
+            services.AddSingleton(emailConfig);
+
             // Add Hangfire services.
             services.AddHangfire(configuration => configuration
                 .SetDataCompatibilityLevel(CompatibilityLevel.Version_170)
@@ -53,7 +62,10 @@ namespace Hangfire
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env,
-            IBackgroundJobClient backgroundJobs)
+            IBackgroundJobClient backgroundJobs,
+            IServiceProvider serviceProvider,
+            IBackgroundJobClient backgroundJobClient,
+            IRecurringJobManager recurringJobManager)
         {
             if (env.IsDevelopment())
             {
@@ -62,7 +74,11 @@ namespace Hangfire
                 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Hangfire v1"));
             }
             app.UseHangfireDashboard();
-            backgroundJobs.Enqueue(() => Console.WriteLine("Hello world from Hangfire!"));
+            //backgroundJobClient.Enqueue(() => Console.WriteLine("Hello Tapan"));
+            recurringJobManager.AddOrUpdate(
+                "myrecurringjob",
+                () => serviceProvider.GetService<ITestJob>().TestJob(),
+                "* * * * *");
 
             app.UseHttpsRedirection();
 
@@ -73,7 +89,7 @@ namespace Hangfire
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();
-                endpoints.MapHangfireDashboard("/jobs");
+                endpoints.MapHangfireDashboard("/EAP");
             });
         }
     }
